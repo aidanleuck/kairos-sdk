@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -84,6 +85,38 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 	return disks
 }
 
+// isMultipathPartition checks if the given partition entry is a multipath partition
+func isMultipathPartition(entry os.DirEntry, paths *Paths) bool {
+	namePath := filepath.Join(paths.SysBlock, entry.Name(), "dm/name")
+	if _, err := os.Stat(namePath); err != nil {
+		// If the name file doesn't exist, we assume it's not a multipath partition
+		return false
+	}
+
+    nameBytes, err := os.ReadFile(namePath)
+	if err != nil {
+		// If we can't read the name file, we assume it's not a multipath partition
+		return false
+	}
+
+	name := strings.TrimSpace(string(nameBytes))
+	// Check for common multipath partition naming conventions for partitions
+	switch{
+	// dm-X-part1, dm-X-part2, etc.
+	case regexp.MustCompile(`^dm-\d+-part\d+$`).MatchString(name):
+		return true
+	// dm-Xp1, dm-Xp2, etc.
+	case regexp.MustCompile(`^dm-\d+p\d+$`).MatchString(name):
+		return true	
+	// dm-X-p1, dm-X-p2, etc.
+	case regexp.MustCompile(`^dm-\d+-p\d+$`).MatchString(name):
+		return true
+	default:
+		return false
+	}
+
+}
+
 func diskSizeBytes(paths *Paths, disk string, logger *types.KairosLogger) uint64 {
 	// We can find the number of 512-byte sectors by examining the contents of
 	// /sys/block/$DEVICE/size and calculate the physical bytes accordingly.
@@ -118,7 +151,7 @@ func diskPartitions(paths *Paths, disk string, logger *types.KairosLogger) types
 	}
 	for _, file := range files {
 		fname := file.Name()
-		if !strings.HasPrefix(fname, disk) {
+		if !strings.HasPrefix(fname, disk) && !isMultipathPartition(file, paths) {
 			continue
 		}
 		logger.Logger.Debug().Str("file", fname).Msg("Reading partition file")
