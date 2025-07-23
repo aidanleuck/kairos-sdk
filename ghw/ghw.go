@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -87,33 +86,29 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 
 // isMultipathPartition checks if the given partition entry is a multipath partition
 func isMultipathPartition(entry os.DirEntry, paths *Paths) bool {
-	namePath := filepath.Join(paths.SysBlock, entry.Name(), "dm/name")
-	if _, err := os.Stat(namePath); err != nil {
+	// The existence of the dm/uuid file indicates this is a multipath device and or partition
+	uuidPath := filepath.Join(paths.SysBlock, entry.Name(), "dm/uuid")
+	if _, err := os.Stat(uuidPath); err != nil {
 		// If the name file doesn't exist, we assume it's not a multipath partition
 		return false
 	}
 
-    nameBytes, err := os.ReadFile(namePath)
+    uuidBytes, err := os.ReadFile(uuidPath)
 	if err != nil {
-		// If we can't read the name file, we assume it's not a multipath partition
+		// If we can't read the uuid file, we assume it's not a multipath partition
 		return false
 	}
 
-	name := strings.TrimSpace(string(nameBytes))
-	// Check for common multipath partition naming conventions for partitions
-	switch{
-	// dm-X-part1, dm-X-part2, etc.
-	case regexp.MustCompile(`^dm-\d+-part\d+$`).MatchString(name):
+	// Multipath partitions often have names like "dm-X-part1", "dm-Xp1", etc.
+	// We check for these naming conventions to identify them from normal multipath devices.
+	uuid := strings.TrimSpace(string(uuidBytes))
+
+	// uuid has the form of part-mpath-id so we can check if the uuid starts with part
+	if strings.HasPrefix(uuid, "part") || strings.Contains(uuid, "-part") || strings.Contains(uuid, "mpath") {
 		return true
-	// dm-Xp1, dm-Xp2, etc.
-	case regexp.MustCompile(`^dm-\d+p\d+$`).MatchString(name):
-		return true	
-	// dm-X-p1, dm-X-p2, etc.
-	case regexp.MustCompile(`^dm-\d+-p\d+$`).MatchString(name):
-		return true
-	default:
-		return false
 	}
+
+	return false
 
 }
 
