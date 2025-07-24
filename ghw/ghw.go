@@ -103,9 +103,9 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 
 func isMultipathPartition(entry os.DirEntry, paths *Paths) bool {
     // Must be a dm device to be a multipath partition
-    if !strings.HasPrefix(entry.Name(), "dm-") {
-        return false
-    }
+    if !isMultipathDevice(entry) {
+		return false
+	}
     
     // Check for dm/uuid file existence
     uuidPath := filepath.Join(paths.SysBlock, entry.Name(), "dm/uuid")

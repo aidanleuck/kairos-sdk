@@ -35,7 +35,7 @@ func (m *MultipathPartitionHandler) GetPartitions(paths *Paths, logger *types.Ka
 		partName := holder.Name()
 
 		// Only consider dm- devices as potential multipath partitions
-		if isMultipathDevice(holder) {
+		if !isMultipathDevice(holder) {
 			continue
 		}
 		
