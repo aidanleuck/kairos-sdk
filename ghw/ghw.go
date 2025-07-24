@@ -70,7 +70,7 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 
 		// Skip entries that are multipath partitions
 		// we will handle them when we parse this disks partitions
-		if isMultipathPartition(file, paths) {
+		if isMultipathPartition(file, paths, logger) {
 			logger.Logger.Debug().Str("file", dname).Msg("Skipping multipath partition")
 			continue
 		}
@@ -82,7 +82,7 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 		d := &types.Disk{
 			Name:      dname,
 			SizeBytes: size,
-			UUID:      diskUUID(paths, dname, "", logger),
+			UUID:      diskUUID(paths, dname, logger),
 		}
 
 		if(isMultipathDevice(file)) {
@@ -101,26 +101,23 @@ func GetDisks(paths *Paths, logger *types.KairosLogger) []*types.Disk {
 	return disks
 }
 
-func isMultipathPartition(entry os.DirEntry, paths *Paths) bool {
+func isMultipathPartition(entry os.DirEntry, paths *Paths, logger *types.KairosLogger) bool {
     // Must be a dm device to be a multipath partition
     if !isMultipathDevice(entry) {
 		return false
 	}
-    
-    // Check for dm/uuid file existence
-    uuidPath := filepath.Join(paths.SysBlock, entry.Name(), "dm/uuid")
-    uuidBytes, err := os.ReadFile(uuidPath)
-    if err != nil {
-        return false
-    }
 
-    uuid := strings.TrimSpace(string(uuidBytes))
-    
-    // Multipath partitions typically have UUIDs indicating they are partitions
-    // Common patterns: "part1-mpath-xxx", "mpath-xxx-part1", etc.
-    return strings.HasPrefix(uuid, "part") || 
-           strings.Contains(uuid, "-part") || 
-           (strings.Contains(uuid, "mpath") && strings.Contains(uuid, "part"))
+	deviceName := entry.Name()
+	udevInfo, err := udevInfoPartition(paths, deviceName, logger)
+	if err != nil {
+		logger.Logger.Error().Err(err).Str("devNo", deviceName).Msg("Failed to get udev info")
+		return false
+	}
+
+	// Check if the udev info contains DM_PART indicating it's a partition
+	// this is the primary check for multipath partitions and should be safe.
+	_, ok := udevInfo["DM_PART"]
+	return ok
 }
 
 func diskSizeBytes(paths *Paths, disk string, logger *types.KairosLogger) uint64 {

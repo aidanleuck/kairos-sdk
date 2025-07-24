@@ -34,13 +34,14 @@ func (d *DiskPartitionHandler) GetPartitions(paths *Paths, logger *types.KairosL
 			continue
 		}
 		logger.Logger.Debug().Str("file", fname).Msg("Reading partition file")
-		size := partitionSizeBytes(paths,  d.DiskName, fname, logger)
+		partitionPath := filepath.Join(d.DiskName, fname)
+		size := partitionSizeBytes(paths, partitionPath, logger)
 		mp, pt := partitionInfo(paths, fname, logger)
-		du := diskPartUUID(paths,  d.DiskName, fname, logger)
+		du := diskPartUUID(paths, partitionPath, logger)
 		if pt == "" {
-			pt = diskPartTypeUdev(paths,  d.DiskName, fname, logger)
+			pt = diskPartTypeUdev(paths, partitionPath, logger)
 		}
-		fsLabel := diskFSLabel(paths,  d.DiskName, fname, logger)
+		fsLabel := diskFSLabel(paths, partitionPath, logger)
 		p := &types.Partition{
 			Name:            fname,
 			Size:            uint(size / (1024 * 1024)),
