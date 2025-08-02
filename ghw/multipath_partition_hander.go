@@ -48,10 +48,25 @@ func (m *MultipathPartitionHandler) GetPartitions(paths *Paths, logger *types.Ka
 
         logger.Logger.Debug().Str("partition", partName).Msg("Found multipath partition")
 
+        udevInfo, err := udevInfoPartition(paths, partName, logger)
+        if err != nil {
+            logger.Logger.Error().Err(err).Str("devNo", partName).Msg("Failed to get udev info")
+            return out
+        }
+
+        mapperName, ok := udevInfo["DM_NAME"]
+        if !ok {
+            logger.Logger.Error().Str("devNo", partName).Msg("DM_NAME not found in udev info")
+            continue
+        }
+
+        // In the /mount/procs file system, multipath partitions are represented as /dev/mapper/<mapper_name>
+        mountName := filepath.Join("/dev/mapper", mapperName)
+
         // For multipath partitions, we need to get size directly from the partition device
         // since it's a top-level entry in /sys/block, not nested under the parent
 		size := partitionSizeBytes(paths, partName, logger)
-		mp, pt := partitionInfo(paths, partName, logger)
+		mp, pt := partitionInfo(paths, mountName, logger)
 		du := diskPartUUID(paths, partName, logger)
 		if pt == "" {
 			pt = diskPartTypeUdev(paths, partName, logger)
