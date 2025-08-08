@@ -21,6 +21,7 @@ func (m *MultipathPartitionHandler) GetPartitions(paths *Paths, logger *types.Ka
     out := make(types.PartitionList, 0)
 
     // For multipath devices, partitions appear as holders of the parent device
+    // in /sys/block/<disk>/holders/<holder>
     holdersPath := filepath.Join(paths.SysBlock, m.DiskName, "holders")
     logger.Logger.Debug().Str("path", holdersPath).Msg("Reading multipath holders")
 
@@ -30,6 +31,7 @@ func (m *MultipathPartitionHandler) GetPartitions(paths *Paths, logger *types.Ka
         return out
     }
 
+    // Find all multipath partitions by checking each holder
     for _, holder := range holders {
         partName := holder.Name()
 
@@ -60,14 +62,29 @@ func (m *MultipathPartitionHandler) GetPartitions(paths *Paths, logger *types.Ka
             continue
         }
 
-        // In the /mount/procs file system, multipath partitions are represented as /dev/mapper/<mapper_name>
-        mountName := filepath.Join("/dev/mapper", mapperName)
-
         // For multipath partitions, we need to get size directly from the partition device
         // since it's a top-level entry in /sys/block, not nested under the parent
 		size := partitionSizeBytes(paths, partName, logger)
-		mp, pt := partitionInfo(paths, mountName, logger)
 		du := diskPartUUID(paths, partName, logger)
+
+        // The mount point is usually the same as the mapper name
+        // however you can also mount it as /dev/dm-<n> or /dev/mapper/<mapperName>
+        // so we need to check both
+        potentialMountNames := []string{
+            filepath.Join("/dev/mapper", mapperName),
+            filepath.Join("/dev", partName),
+        }
+
+        // Search for the mount point in the system
+        var mp, pt string
+        for _, mountName := range potentialMountNames {
+            mp, pt = partitionInfo(paths, mountName, logger)
+            if mp != "" {
+                logger.Logger.Debug().Str("mountPoint", mp).Msg("Found mount point for partition")
+                break
+            }
+        }
+
 		if pt == "" {
 			pt = diskPartTypeUdev(paths, partName, logger)
 		}
